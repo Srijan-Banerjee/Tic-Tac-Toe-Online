@@ -1,0 +1,1983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe: Online</title>
+    
+    <!-- Google Fonts: Orbitron -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- Firebase SDK (Database Only) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        /* --- CSS VARIABLES & RESET --- */
+        :root {
+            --bg-color: #050510;
+            --neon-x: #00ffff; /* Cyan */
+            --neon-o: #ff00ff; /* Magenta */
+            --neon-y: #ffff00; /* Yellow */
+            --neon-orange: #ff9900; /* Custom Match Color */
+            --text-color: #ffffff;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --danger-color: #ff3333;
+            --success-color: #33ff33;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            outline: none;
+        }
+
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* --- LOADING OVERLAY --- */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 5, 16, 0.95);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.3s;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(0, 255, 255, 0.1);
+            border-top: 4px solid var(--neon-x);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            box-shadow: 0 0 15px var(--neon-x);
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .loading-text {
+            color: var(--neon-x);
+            letter-spacing: 2px;
+            animation: pulse 1.5s infinite;
+        }
+
+        /* --- SCREENS --- */
+        .screen {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: absolute;
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.95);
+        }
+
+        .screen.active {
+            opacity: 1;
+            pointer-events: all;
+            transform: scale(1);
+            position: relative;
+        }
+
+        /* --- LOGO STYLING --- */
+        .game-logo {
+            width: 120px; /* Adjust size here */
+            height: auto;
+            margin-bottom: 15px;
+            filter: drop-shadow(0 0 10px var(--neon-x)); /* Neon Glow Effect */
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        /* --- AUTH SCREEN --- */
+        .auth-container {
+            width: 350px;
+            padding: 30px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #333;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+            text-align: center;
+        }
+
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #333;
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 10px;
+            cursor: pointer;
+            color: #666;
+            transition: 0.3s;
+        }
+
+        .auth-tab:hover { color: #aaa; }
+
+        .auth-tab.active {
+            color: var(--neon-x);
+            border-bottom: 2px solid var(--neon-x);
+            text-shadow: 0 0 5px var(--neon-x);
+        }
+
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .input-group {
+            position: relative;
+            text-align: left;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #333;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            border-radius: 4px;
+            transition: 0.3s;
+        }
+
+        .input-field:focus {
+            border-color: var(--neon-x);
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+        }
+
+        /* Password Wrapper for Eye Icon */
+        .password-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        .password-wrapper .input-field {
+            padding-right: 40px; /* Space for the eye icon */
+        }
+
+        .btn-pass-toggle {
+            position: absolute;
+            top: 50%;
+            right: 10px;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.3s;
+        }
+
+        .btn-pass-toggle:hover {
+            color: var(--neon-x);
+        }
+
+        .input-label {
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .auth-error {
+            color: var(--danger-color);
+            font-size: 0.8rem;
+            min-height: 1.2em;
+            text-shadow: 0 0 5px rgba(255, 51, 51, 0.5);
+        }
+
+        /* --- BUTTONS --- */
+        button { user-select: none; }
+
+        .title {
+            font-size: 3rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            text-shadow: 0 0 10px var(--neon-x), 0 0 20px var(--neon-o);
+            line-height: 1.2;
+        }
+
+        .btn-main {
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-family: 'Orbitron', sans-serif;
+            background: transparent;
+            color: var(--neon-x);
+            border: 2px solid var(--neon-x);
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--neon-x) inset, 0 0 10px var(--neon-x);
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .btn-main:hover {
+            background: var(--neon-x);
+            color: var(--bg-color);
+            box-shadow: 0 0 20px var(--neon-x) inset, 0 0 30px var(--neon-x);
+        }
+
+        /* --- UPDATED CUSTOM MATCH BUTTON --- */
+        .btn-custom-match {
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-family: 'Orbitron', sans-serif;
+            background: transparent;
+            color: var(--neon-orange); /* Neon Orange */
+            border: 2px solid var(--neon-orange);
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--neon-orange) inset, 0 0 10px var(--neon-orange);
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .btn-custom-match:hover {
+            background: var(--neon-orange);
+            color: var(--bg-color);
+            box-shadow: 0 0 20px var(--neon-orange) inset, 0 0 30px var(--neon-orange);
+        }
+
+        .btn-danger {
+            margin-top: 15px;
+            padding: 12px;
+            font-size: 1rem;
+            font-family: 'Orbitron', sans-serif;
+            background: rgba(255, 0, 0, 0.1);
+            color: var(--danger-color);
+            border: 2px solid var(--danger-color);
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 0 5px var(--danger-color);
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .btn-danger:hover {
+            background: var(--danger-color);
+            color: #fff;
+            box-shadow: 0 0 20px var(--danger-color);
+        }
+
+        .btn-logout {
+            margin-top: 20px;
+            padding: 10px 20px;
+            border: 1px solid var(--neon-o);
+            color: var(--neon-o);
+            background: transparent;
+            cursor: pointer;
+            font-family: 'Orbitron', sans-serif;
+            border-radius: 4px;
+            transition: 0.3s;
+            box-shadow: 0 0 5px var(--neon-o) inset;
+        }
+        
+        .btn-logout:hover {
+            background: var(--neon-o);
+            color: #fff;
+            box-shadow: 0 0 15px var(--neon-o);
+        }
+
+        /* --- CUSTOM MATCH SCREEN --- */
+        .custom-container {
+            width: 360px;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .custom-segment {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            position: relative;
+        }
+
+        .segment-title {
+            position: absolute;
+            top: -12px;
+            left: 15px;
+            background: var(--bg-color);
+            padding: 0 10px;
+            font-size: 0.8rem;
+            color: var(--neon-x);
+            font-weight: bold;
+        }
+
+        .room-display {
+            background: rgba(0,0,0,0.5);
+            border: 1px dashed var(--neon-o);
+            color: #fff;
+            font-size: 1.5rem;
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            letter-spacing: 3px;
+            cursor: pointer;
+        }
+
+        .btn-copy {
+            width: 100%;
+            padding: 8px;
+            background: #222;
+            border: 1px solid #555;
+            color: #aaa;
+            font-family: 'Orbitron', sans-serif;
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin-bottom: 10px;
+        }
+        
+        .btn-copy:hover { background: #333; color: #fff; }
+
+        .btn-create {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255, 0, 255, 0.2);
+            border: 1px solid var(--neon-o);
+            color: var(--neon-o);
+            font-family: 'Orbitron', sans-serif;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-create:hover { background: var(--neon-o); color: #000; box-shadow: 0 0 15px var(--neon-o); }
+
+        .btn-join {
+            width: 100%;
+            padding: 10px;
+            background: rgba(0, 255, 255, 0.2);
+            border: 1px solid var(--neon-x);
+            color: var(--neon-x);
+            font-family: 'Orbitron', sans-serif;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: 0.3s;
+        }
+
+        .btn-join:hover { background: var(--neon-x); color: #000; box-shadow: 0 0 15px var(--neon-x); }
+
+        .btn-back {
+            width: 100%;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 1.1rem;
+            font-family: 'Orbitron', sans-serif;
+            background: transparent;
+            color: var(--neon-y);
+            border: 2px solid var(--neon-y);
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--neon-y) inset, 0 0 10px var(--neon-y);
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .btn-back:hover {
+            background: var(--neon-y);
+            color: #000;
+            box-shadow: 0 0 20px var(--neon-y) inset, 0 0 30px var(--neon-y);
+        }
+
+        /* --- GAME SCREEN UI --- */
+        .hud {
+            display: flex;
+            justify-content: space-between;
+            width: 320px;
+            margin-bottom: 20px;
+        }
+
+        .player-badge {
+            padding: 10px;
+            background: var(--glass-bg);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            text-align: center;
+            width: 45%;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .player-name {
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            width: 100%;
+            color: #aaa;
+        }
+
+        .player-symbol {
+            font-size: 1.5rem;
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        /* SCORE DISPLAY */
+        .score-display {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-top: 5px;
+            text-shadow: 0 0 10px currentColor;
+        }
+
+        .player-badge.active-turn {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #fff;
+        }
+
+        .p-x { border-bottom: 3px solid var(--neon-x); }
+        .p-x .player-symbol, .p-x .score-display { color: var(--neon-x); text-shadow: 0 0 10px var(--neon-x); }
+        
+        .p-o { border-bottom: 3px solid var(--neon-o); }
+        .p-o .player-symbol, .p-o .score-display { color: var(--neon-o); text-shadow: 0 0 10px var(--neon-o); }
+
+        .game-status-text {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            height: 1.5em;
+            text-shadow: 0 0 5px #fff;
+        }
+
+        /* NEW ROOM BADGE STYLE */
+        .room-badge {
+            margin-bottom: 15px;
+            padding: 5px 15px;
+            background: rgba(255, 153, 0, 0.1);
+            border: 1px dashed var(--neon-orange);
+            color: var(--neon-orange);
+            font-size: 0.9rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .room-badge:hover {
+            background: var(--neon-orange);
+            color: #000;
+            box-shadow: 0 0 10px var(--neon-orange);
+        }
+
+        /* --- GLOWING BOARD --- */
+        .board-container {
+            position: relative;
+            width: 320px;
+            height: 320px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            width: 100%;
+            height: 100%;
+            gap: 4px;
+            background: linear-gradient(135deg, var(--neon-x), #9900ff, var(--neon-o), var(--neon-x));
+            background-size: 300% 300%;
+            animation: gradientMove 4s ease infinite;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3), 0 0 20px rgba(255, 0, 255, 0.3);
+            border-radius: 8px;
+            border: 2px solid rgba(255,255,255,0.1);
+        }
+
+        @keyframes gradientMove {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .cell {
+            background: rgba(5, 5, 16, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .cell:hover { background: rgba(42, 42, 80, 0.85); }
+
+        .symbol-x {
+            color: var(--neon-x);
+            text-shadow: 0 0 10px var(--neon-x), 0 0 20px var(--neon-x);
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .symbol-o {
+            color: var(--neon-o);
+            text-shadow: 0 0 10px var(--neon-o), 0 0 20px var(--neon-o);
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        #win-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Controls */
+        .controls-wrapper {
+            width: 320px;
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn-rematch {
+            width: 100%;
+            padding: 10px;
+            background: var(--glass-bg);
+            border: 1px solid #fff;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-rematch:hover { background: rgba(255,255,255,0.2); }
+        .btn-rematch.waiting { opacity: 0.7; cursor: default; }
+
+        .btn-leave {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 0, 0, 0.15);
+            border: 1px solid var(--danger-color);
+            color: var(--danger-color);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            text-shadow: 0 0 5px var(--danger-color);
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.2);
+        }
+
+        .btn-leave:hover {
+            background: var(--danger-color);
+            color: white;
+            box-shadow: 0 0 20px var(--danger-color);
+        }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
+
+        .btn-rematch.pulse {
+            animation: pulse-glow 1.5s infinite;
+            border-color: var(--neon-x); color: var(--neon-x);
+        }
+
+        /* --- CHAT SYSTEM --- */
+        .chat-container {
+            margin-top: 20px;
+            width: 320px;
+            height: 120px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            border-radius: 5px;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+
+        .chat-container.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            border: none;
+            border-radius: 0;
+            background: rgba(5, 5, 16, 0.98);
+            z-index: 2000;
+        }
+
+        .btn-chat-toggle {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            background: transparent;
+            border: none;
+            color: #666;
+            font-size: 1.2rem;
+            cursor: pointer;
+            z-index: 10;
+            transition: 0.2s;
+            line-height: 1;
+        }
+
+        .btn-chat-toggle:hover { color: var(--neon-x); transform: scale(1.1); }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            padding-top: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 0.8rem;
+        }
+
+        .chat-messages::-webkit-scrollbar { width: 5px; }
+        .chat-messages::-webkit-scrollbar-thumb { background: #444; }
+
+        .msg { padding: 5px 10px; border-radius: 4px; max-width: 80%; word-wrap: break-word; }
+        .msg-sender { font-size: 0.7rem; opacity: 0.7; margin-bottom: 2px; }
+        
+        .msg-self {
+            align-self: flex-end;
+            background: rgba(255, 0, 255, 0.2);
+            border-left: 2px solid var(--neon-o);
+            text-align: right;
+        }
+
+        .msg-opp {
+            align-self: flex-start;
+            background: rgba(0, 255, 255, 0.2);
+            border-right: 2px solid var(--neon-x);
+            text-align: left;
+        }
+
+        .chat-input-area {
+            display: flex;
+            align-items: center;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            padding: 0;
+            background: rgba(0,0,0,0.2);
+            height: 50px;
+        }
+
+        .chat-input {
+            flex: 1;
+            height: 100%;
+            background: transparent;
+            border: none;
+            color: #fff;
+            padding: 0 15px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+        }
+
+        .btn-send {
+            width: 50px;
+            height: 100%;
+            background: transparent;
+            border: none;
+            color: var(--neon-x);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .btn-send:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            box-shadow: 0 0 10px var(--neon-x);
+        }
+        
+        .btn-send svg {
+            width: 20px;
+            height: 20px;
+            transform: translateX(2px);
+        }
+        
+        .hidden { display: none !important; }
+
+    </style>
+</head>
+<body>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loading-text">INITIALIZING SYSTEM...</div>
+    </div>
+
+    <!-- AUTH SCREEN -->
+    <div id="auth-screen" class="screen">
+        <!-- LOGO IMAGE HERE -->
+        <img src="favicon.png" alt="Game Logo" class="game-logo">
+
+        <h1 class="title">TIC-TAC-TOE Online</h1>
+        <div class="auth-container">
+            <div class="auth-tabs">
+                <div class="auth-tab active" id="tab-login" onclick="switchTab('login')">LOGIN</div>
+                <div class="auth-tab" id="tab-register" onclick="switchTab('register')">REGISTER</div>
+            </div>
+
+            <form id="form-login" class="auth-form">
+                <div class="input-group">
+                    <label class="input-label">EMAIL</label>
+                    <input type="email" id="login-email" class="input-field" required>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">PASSWORD</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="login-pass" class="input-field" required>
+                        <button type="button" class="btn-pass-toggle" id="toggle-login-pass">
+                            <!-- Eye Open SVG -->
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="login-error" class="auth-error"></div>
+                <button type="submit" class="btn-main">ENTER SYSTEM</button>
+            </form>
+
+            <form id="form-register" class="auth-form hidden">
+                <div class="input-group">
+                    <label class="input-label">USERNAME</label>
+                    <input type="text" id="reg-username" class="input-field" maxlength="12" required>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">EMAIL</label>
+                    <input type="email" id="reg-email" class="input-field" required>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">PASSWORD</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="reg-pass" class="input-field" required>
+                        <button type="button" class="btn-pass-toggle" id="toggle-reg-pass">
+                            <!-- Eye Open SVG -->
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="reg-error" class="auth-error"></div>
+                <button type="submit" class="btn-main">CREATE ID</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- START SCREEN -->
+    <div id="start-screen" class="screen">
+        <!-- LOGO IMAGE HERE TOO (Optional) -->
+        <img src="favicon.png" alt="Game Logo" class="game-logo" style="width: 80px;">
+
+        <h1 class="title">Tic-Tac-Toe Online<br><span id="display-username" style="font-size: 0.6em; color: var(--neon-x);">USER</span></h1>
+        
+        <!-- Main Controls -->
+        <div style="width: 300px;">
+            <button id="btn-start" class="btn-main">FIND MATCH</button>
+            <button id="btn-cancel-search" class="btn-danger hidden">CANCEL SEARCH</button>
+            
+            <!-- CHANGED CLASS TO CUSTOM MATCH -->
+            <button id="btn-custom" class="btn-custom-match">CUSTOM MATCH</button>
+        </div>
+
+        <p id="match-status" style="margin-top: 20px; color: #888; height: 1.2em;"></p>
+        
+        <button id="btn-logout" class="btn-logout">LOGOUT</button>
+    </div>
+
+    <!-- CUSTOM MATCH SCREEN -->
+    <div id="custom-screen" class="screen">
+        <h2 class="title" style="font-size: 2rem;">CUSTOM ROOM</h2>
+        <div class="custom-container">
+            
+            <!-- Generate Segment -->
+            <div class="custom-segment">
+                <div class="segment-title">CREATE ROOM</div>
+                <p style="font-size: 0.8rem; color: #888;">Generate ID and share with friend</p>
+                <div id="room-id-display" class="room-display">------</div>
+                <button id="btn-copy-id" class="btn-copy">COPY ID</button>
+                <button id="btn-create-room" class="btn-create">CREATE & WAIT</button>
+            </div>
+
+            <!-- Join Segment -->
+            <div class="custom-segment">
+                <div class="segment-title">JOIN ROOM</div>
+                <div class="input-group">
+                    <input type="text" id="join-room-id" class="input-field" placeholder="Enter Room ID" style="text-align: center; letter-spacing: 2px; text-transform: uppercase;">
+                </div>
+                <button id="btn-join-room" class="btn-join">JOIN ROOM</button>
+            </div>
+
+            <button id="btn-custom-back" class="btn-back">BACK TO MENU</button>
+        </div>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="game-screen" class="screen">
+        <!-- HUD with Scores -->
+        <div class="hud">
+            <div id="badge-o" class="player-badge p-o">
+                <div class="player-name" id="name-o">Waiting...</div>
+                <span class="player-symbol">O</span>
+                <div id="score-o" class="score-display">0</div>
+            </div>
+            <div id="badge-x" class="player-badge p-x">
+                <div class="player-name" id="name-x">Waiting...</div>
+                <span class="player-symbol">X</span>
+                <div id="score-x" class="score-display">0</div>
+            </div>
+        </div>
+
+        <!-- NEW: Room Badge (Hidden by default) -->
+        <div id="game-room-badge" class="room-badge hidden" title="Click to Copy Room ID">
+            ROOM ID: <span id="span-room-id" style="font-weight:bold; color:#fff;"></span> 📋
+        </div>
+
+        <!-- Status -->
+        <div id="game-status" class="game-status-text">Initializing...</div>
+
+        <!-- Board -->
+        <div class="board-container">
+            <canvas id="win-canvas" width="320" height="320"></canvas>
+            <div class="board" id="board">
+                <div class="cell" data-index="0"></div>
+                <div class="cell" data-index="1"></div>
+                <div class="cell" data-index="2"></div>
+                <div class="cell" data-index="3"></div>
+                <div class="cell" data-index="4"></div>
+                <div class="cell" data-index="5"></div>
+                <div class="cell" data-index="6"></div>
+                <div class="cell" data-index="7"></div>
+                <div class="cell" data-index="8"></div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls-wrapper">
+            <button id="btn-play-again" class="btn-rematch hidden">PLAY AGAIN</button>
+            <button id="btn-leave-match" class="btn-leave">LEAVE MATCH</button>
+        </div>
+
+        <!-- Chat -->
+        <div class="chat-container" id="chat-container">
+            <button id="btn-chat-toggle" class="btn-chat-toggle" title="Toggle Size">⤢</button>
+            <div id="chat-messages" class="chat-messages"></div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." maxlength="150">
+                <button id="btn-chat-send" class="btn-send" title="Send Message">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // FIREBASE CONFIGURATION
+        // ==========================================
+        
+        // <<< PASTE YOUR FIREBASE CONFIGURATION OBJECT HERE >>>
+        const firebaseConfig = {
+          apiKey: "AIzaSyAH0N8XvgbbNUn5xnSkcSNbEc3l73vbkWE",
+          authDomain: "games-dbb26.firebaseapp.com",
+          databaseURL: "https://games-dbb26-default-rtdb.firebaseio.com",
+          projectId: "games-dbb26",
+          storageBucket: "games-dbb26.firebasestorage.app",
+          messagingSenderId: "606354717037",
+          appId: "1:606354717037:web:51b64c143052e0e4530264"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+
+        // ==========================================
+        // SOUND CONTROLLER (WEB AUDIO API)
+        // ==========================================
+        
+        class SoundController {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.initialized = false;
+            }
+
+            init() {
+                if (!this.initialized) {
+                    this.ctx.resume().then(() => {
+                        this.initialized = true;
+                    });
+                }
+            }
+
+            // Synthesizer Helper
+            playTone(freq, type, duration, vol = 0.1, slideTo = null) {
+                if(this.ctx.state === 'suspended') this.ctx.resume();
+                
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                if (slideTo) {
+                    osc.frequency.exponentialRampToValueAtTime(slideTo, this.ctx.currentTime + duration);
+                }
+
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+
+            // Sound Effects
+            hover() {
+                // Very short, high pitch tick
+                this.playTone(800, 'sine', 0.05, 0.02);
+            }
+
+            click() {
+                // Standard UI Confirmation beep
+                this.playTone(1200, 'triangle', 0.1, 0.1);
+            }
+
+            transition() {
+                // Swoosh sound (Noise buffer would be better, but we use osc slide for simplicity)
+                this.playTone(100, 'sine', 0.4, 0.1, 800);
+            }
+
+            moveX() {
+                // High sci-fi laser chirp
+                this.playTone(1000, 'sawtooth', 0.15, 0.1, 2000);
+            }
+
+            moveO() {
+                // Lower sci-fi blob sound
+                this.playTone(400, 'square', 0.15, 0.08, 100);
+            }
+
+            chat() {
+                // Data receiving blip
+                this.playTone(2000, 'sine', 0.1, 0.05);
+                setTimeout(() => this.playTone(2500, 'sine', 0.1, 0.05), 100);
+            }
+
+            victory() {
+                // Major Chord Arpeggio
+                const now = this.ctx.currentTime;
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                    setTimeout(() => this.playTone(freq, 'triangle', 0.4, 0.1), i * 150);
+                });
+            }
+
+            defeat() {
+                // Descending dissonant tones
+                this.playTone(300, 'sawtooth', 0.5, 0.1, 100);
+                setTimeout(() => this.playTone(200, 'sawtooth', 0.8, 0.1, 50), 400);
+            }
+
+            draw() {
+                // Neutral flat tones
+                this.playTone(400, 'sine', 0.3, 0.1);
+                setTimeout(() => this.playTone(400, 'sine', 0.3, 0.1), 300);
+            }
+        }
+
+        const sfx = new SoundController();
+
+        // Add Global Listener to init Audio Context on first click
+        document.addEventListener('click', () => sfx.init(), { once: true });
+
+        // Add Global Button Sounds
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mouseenter', () => sfx.hover());
+            btn.addEventListener('click', () => sfx.click());
+        });
+        
+        // ==========================================
+        // UTILITIES
+        // ==========================================
+        
+        function simpleHash(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return hash.toString();
+        }
+
+        function sanitizeEmail(email) {
+            return btoa(email).replace(/\//g, '_').replace(/\+/g, '-').replace(/=/g, '');
+        }
+
+        function generateRoomId() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let result = '';
+            for (let i = 0; i < 6; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        function showLoading(text = "PROCESSING...") {
+            document.getElementById('loading-text').innerText = text;
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            document.getElementById('loading-overlay').style.opacity = '1';
+            document.getElementById('loading-overlay').style.pointerEvents = 'all';
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.style.opacity = '0';
+            overlay.style.pointerEvents = 'none';
+            setTimeout(() => {
+                if(overlay.style.opacity === '0') overlay.classList.add('hidden');
+            }, 300);
+        }
+
+        function switchScreen(screenId) {
+            sfx.transition(); // Sound Effect
+            document.querySelectorAll('.screen').forEach(s => {
+                s.classList.remove('active');
+                setTimeout(() => {
+                    if(!s.classList.contains('active')) s.classList.add('hidden');
+                }, 500); 
+            });
+            const target = document.getElementById(screenId);
+            target.classList.remove('hidden');
+            setTimeout(() => target.classList.add('active'), 50);
+        }
+
+        // ==========================================
+        // ROBUST COPY FUNCTION
+        // ==========================================
+        function copyToClipboard(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(text);
+            }
+            return new Promise((resolve, reject) => {
+                try {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-9999px";
+                    textArea.style.top = "0";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    const successful = document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    if (successful) resolve();
+                    else reject(new Error("Copy failed"));
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        }
+
+        // ==========================================
+        // AUTHENTICATION SYSTEM
+        // ==========================================
+        
+        let currentUser = null;
+        const loginForm = document.getElementById('form-login');
+        const regForm = document.getElementById('form-register');
+        const loginError = document.getElementById('login-error');
+        const regError = document.getElementById('reg-error');
+
+        // --- PASSWORD TOGGLE LOGIC ---
+        function setupPasswordToggle(inputId, toggleId) {
+            const input = document.getElementById(inputId);
+            const toggle = document.getElementById(toggleId);
+            
+            // Eye Open Path
+            const eyeOpen = `M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z`;
+            // Eye Closed Path (Slash Style)
+            const eyeClosed = `M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22`;
+
+            toggle.addEventListener('click', () => {
+                sfx.click(); // Play sound
+                const isPassword = input.type === 'password';
+                input.type = isPassword ? 'text' : 'password';
+                const svgPath = toggle.querySelector('path');
+                if (isPassword) {
+                    svgPath.setAttribute('d', eyeClosed);
+                    toggle.querySelector('svg').style.fill = 'none';
+                    toggle.querySelector('svg').style.stroke = 'currentColor';
+                    toggle.querySelector('svg').style.strokeWidth = '2';
+                } else {
+                    svgPath.setAttribute('d', eyeOpen);
+                    toggle.querySelector('svg').style.fill = 'currentColor';
+                    toggle.querySelector('svg').style.stroke = 'none';
+                }
+            });
+        }
+
+        // Initialize Toggles
+        setupPasswordToggle('login-pass', 'toggle-login-pass');
+        setupPasswordToggle('reg-pass', 'toggle-reg-pass');
+        
+        window.addEventListener('load', () => {
+            const storedUser = localStorage.getItem('neon_ttt_user');
+            if (storedUser) {
+                currentUser = JSON.parse(storedUser);
+                showLoading("VERIFYING SESSION...");
+                const userKey = sanitizeEmail(currentUser.email);
+                db.ref(`users/${userKey}`).once('value', snapshot => {
+                    if (snapshot.exists() && snapshot.val().password === currentUser.password) {
+                        initUserSession(snapshot.val());
+                    } else {
+                        logout();
+                    }
+                    hideLoading();
+                });
+            } else {
+                switchScreen('auth-screen');
+                hideLoading();
+            }
+        });
+
+        window.switchTab = function(tab) {
+            sfx.click(); // Sound
+            loginError.innerText = '';
+            regError.innerText = '';
+            if(tab === 'login') {
+                document.getElementById('tab-login').classList.add('active');
+                document.getElementById('tab-register').classList.remove('active');
+                loginForm.classList.remove('hidden');
+                regForm.classList.add('hidden');
+            } else {
+                document.getElementById('tab-login').classList.remove('active');
+                document.getElementById('tab-register').classList.add('active');
+                loginForm.classList.add('hidden');
+                regForm.classList.remove('hidden');
+            }
+        }
+
+        // --- REGISTRATION LOGIC ---
+        regForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = document.getElementById('reg-username').value.trim();
+            const email = document.getElementById('reg-email').value.trim().toLowerCase();
+            const pass = document.getElementById('reg-pass').value;
+
+            if (username.length < 3) { regError.innerText = "Username too short."; return; }
+            if (pass.length < 6) { regError.innerText = "Password must be 6+ chars."; return; }
+
+            showLoading("VERIFYING USERNAME...");
+
+            db.ref('users').orderByChild('username').equalTo(username).once('value', snapshot => {
+                if (snapshot.exists()) {
+                    regError.innerText = "Username already exists. Choose another.";
+                    hideLoading();
+                    return;
+                } 
+
+                const userKey = sanitizeEmail(email);
+                db.ref(`users/${userKey}`).once('value', emailSnapshot => {
+                    if (emailSnapshot.exists()) {
+                        regError.innerText = "Email already registered.";
+                        hideLoading();
+                    } else {
+                        const newUser = {
+                            uid: 'user_' + Math.random().toString(36).substr(2, 9),
+                            username: username,
+                            email: email,
+                            password: simpleHash(pass)
+                        };
+
+                        db.ref(`users/${userKey}`).set(newUser).then(() => {
+                            initUserSession(newUser);
+                            hideLoading();
+                        }).catch(err => {
+                            regError.innerText = "Database Error.";
+                            hideLoading();
+                        });
+                    }
+                });
+            });
+        });
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value.trim().toLowerCase();
+            const pass = document.getElementById('login-pass').value;
+
+            showLoading("AUTHENTICATING...");
+            const userKey = sanitizeEmail(email);
+            const passHash = simpleHash(pass);
+
+            db.ref(`users/${userKey}`).once('value', snapshot => {
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    if (data.password === passHash) {
+                        initUserSession(data);
+                    } else {
+                        loginError.innerText = "Invalid Password.";
+                    }
+                } else {
+                    loginError.innerText = "User not found.";
+                }
+                hideLoading();
+            });
+        });
+
+        function initUserSession(user) {
+            currentUser = user;
+            localStorage.setItem('neon_ttt_user', JSON.stringify(user));
+            document.getElementById('display-username').innerText = user.username.toUpperCase();
+            switchScreen('start-screen');
+        }
+
+        function logout() {
+            showLoading("LOGGING OUT...");
+            setTimeout(() => {
+                localStorage.removeItem('neon_ttt_user');
+                currentUser = null;
+                switchScreen('auth-screen');
+                document.getElementById('login-email').value = '';
+                document.getElementById('login-pass').value = '';
+                hideLoading();
+            }, 800);
+        }
+
+        document.getElementById('btn-logout').addEventListener('click', logout);
+
+
+        // ==========================================
+        // MATCHMAKING LOGIC
+        // ==========================================
+        
+        let currentGameId = null;
+        let mySymbol = null; 
+        let currentTurn = 'X';
+        let isGameActive = false;
+        let opponentName = "Opponent";
+        let isSearching = false; 
+        let generatedCustomId = "";
+
+        const btnStart = document.getElementById('btn-start');
+        const btnCancelSearch = document.getElementById('btn-cancel-search');
+        const matchStatus = document.getElementById('match-status');
+        const gameStatusText = document.getElementById('game-status');
+        const cells = document.querySelectorAll('.cell');
+        const canvas = document.getElementById('win-canvas');
+        const ctx = canvas.getContext('2d');
+        const chatInput = document.getElementById('chat-input');
+        const chatMsgs = document.getElementById('chat-messages');
+
+        // --- STANDARD MATCHMAKING ---
+
+        btnStart.addEventListener('click', findMatch);
+        btnCancelSearch.addEventListener('click', cancelMatchSearch);
+
+        function findMatch() {
+            isSearching = true;
+            btnStart.classList.add('hidden');
+            document.getElementById('btn-custom').classList.add('hidden'); 
+            btnCancelSearch.classList.remove('hidden');
+            matchStatus.innerText = "SEARCHING FOR OPPONENT...";
+            
+            const lobbyRef = db.ref('waitingPlayers');
+
+            lobbyRef.transaction((currentData) => {
+                if (currentData === null) {
+                    return { [currentUser.uid]: { 
+                        username: currentUser.username, 
+                        timestamp: Date.now() 
+                    }};
+                } else {
+                    return currentData; 
+                }
+            }, (error, committed, snapshot) => {
+                if (error) {
+                    resetMatchmakingUI("Connection Error.");
+                    return;
+                }
+
+                if (!isSearching) return; 
+
+                const data = snapshot.val();
+                
+                if (data && Object.keys(data).length === 1 && data[currentUser.uid]) {
+                    matchStatus.innerText = "WAITING IN LOBBY...";
+                    waitForOpponent();
+                } else if (data) {
+                    const opponentId = Object.keys(data).find(id => id !== currentUser.uid);
+                    if (opponentId) {
+                        const oppData = data[opponentId];
+                        createStandardGame(opponentId, oppData.username);
+                    } else {
+                        waitForOpponent();
+                    }
+                }
+            });
+        }
+
+        function cancelMatchSearch() {
+            if (!isSearching) return;
+            isSearching = false;
+            db.ref(`waitingPlayers/${currentUser.uid}`).remove()
+                .then(() => {
+                    resetMatchmakingUI("Search Cancelled.");
+                    // Auto-hide after 2 seconds
+                    setTimeout(() => {
+                        // Only clear if we haven't started a new search
+                        if (!isSearching) {
+                            document.getElementById('match-status').innerText = "";
+                        }
+                    }, 2000);
+                })
+                .catch((err) => { resetMatchmakingUI("Error cancelling."); });
+        }
+
+        function resetMatchmakingUI(msg = "") {
+            isSearching = false;
+            btnStart.classList.remove('hidden');
+            document.getElementById('btn-custom').classList.remove('hidden');
+            btnCancelSearch.classList.add('hidden');
+            matchStatus.innerText = msg;
+            db.ref(`waitingPlayers/${currentUser.uid}`).off(); 
+        }
+
+        function waitForOpponent() {
+            const myLobbyRef = db.ref(`waitingPlayers/${currentUser.uid}`);
+            myLobbyRef.onDisconnect().remove();
+
+            myLobbyRef.on('child_removed', () => {
+                if (!isSearching) return; 
+                db.ref('games').orderByChild('playerX/uid').equalTo(currentUser.uid).once('value', snap => {
+                    if(snap.exists()) joinGame(Object.keys(snap.val())[0], 'X');
+                });
+                db.ref('games').orderByChild('playerO/uid').equalTo(currentUser.uid).once('value', snap => {
+                    if(snap.exists()) joinGame(Object.keys(snap.val())[0], 'O');
+                });
+            });
+        }
+
+        function createStandardGame(opponentId, opponentUsername) {
+            db.ref(`waitingPlayers/${opponentId}`).remove();
+            db.ref(`waitingPlayers/${currentUser.uid}`).remove();
+
+            const newGameId = 'game_' + Date.now();
+            const isMeX = Math.random() < 0.5;
+            
+            const pX = isMeX ? { uid: currentUser.uid, name: currentUser.username } : { uid: opponentId, name: opponentUsername };
+            const pO = isMeX ? { uid: opponentId, name: opponentUsername } : { uid: currentUser.uid, name: currentUser.username };
+
+            const initialGameState = {
+                playerX: pX,
+                playerO: pO,
+                turn: 'X',
+                startingTurn: 'X', // Tracks who starts the round
+                board: Array(9).fill(""),
+                status: 'playing',
+                winner: null,
+                winningLine: null,
+                scores: { X: 0, O: 0 },
+                rematchRequests: { X: false, O: false }
+            };
+
+            db.ref(`games/${newGameId}`).set(initialGameState).then(() => {
+                joinGame(newGameId, isMeX ? 'X' : 'O');
+            });
+        }
+
+        // --- CUSTOM MATCHMAKING ---
+
+        document.getElementById('btn-custom').addEventListener('click', () => {
+            switchScreen('custom-screen');
+            generatedCustomId = generateRoomId();
+            document.getElementById('room-id-display').innerText = generatedCustomId;
+            document.getElementById('join-room-id').value = '';
+        });
+
+        document.getElementById('btn-custom-back').addEventListener('click', () => {
+            switchScreen('start-screen');
+        });
+
+        document.getElementById('btn-copy-id').addEventListener('click', () => {
+            copyToClipboard(generatedCustomId).then(() => {
+                const btn = document.getElementById('btn-copy-id');
+                const orig = btn.innerText;
+                btn.innerText = "COPIED!";
+                setTimeout(() => btn.innerText = orig, 1500);
+            }).catch(err => {
+                console.error("Copy Error:", err);
+                alert("Manual Copy Required: " + generatedCustomId);
+            });
+        });
+
+        // 1. CREATE CUSTOM ROOM
+        document.getElementById('btn-create-room').addEventListener('click', () => {
+            const roomId = generatedCustomId;
+            showLoading("CREATING ROOM...");
+            
+            const newGameId = 'room_' + roomId;
+            
+            db.ref(`games/${newGameId}`).once('value', snap => {
+                if(snap.exists()) {
+                    hideLoading();
+                    alert("ID Collision. Please generate a new ID.");
+                    generatedCustomId = generateRoomId();
+                    document.getElementById('room-id-display').innerText = generatedCustomId;
+                    return;
+                }
+
+                const initialGameState = {
+                    playerX: { uid: currentUser.uid, name: currentUser.username },
+                    playerO: null, // Waiting for joiner
+                    turn: 'X',
+                    startingTurn: 'X', // Tracks who starts
+                    board: Array(9).fill(""),
+                    status: 'playing',
+                    customRoom: true, // Flag
+                    winner: null,
+                    winningLine: null,
+                    scores: { X: 0, O: 0 },
+                    rematchRequests: { X: false, O: false }
+                };
+
+                db.ref(`games/${newGameId}`).set(initialGameState).then(() => {
+                    hideLoading();
+                    joinGame(newGameId, 'X');
+                });
+            });
+        });
+
+        // 2. JOIN CUSTOM ROOM
+        document.getElementById('btn-join-room').addEventListener('click', () => {
+            const roomId = document.getElementById('join-room-id').value.trim().toUpperCase();
+            if(roomId.length < 6) { alert("Invalid Room ID"); return; }
+            
+            showLoading("CONNECTING...");
+            const targetGameId = 'room_' + roomId;
+
+            db.ref(`games/${targetGameId}`).once('value', snap => {
+                if(!snap.exists()) {
+                    hideLoading();
+                    alert("Room not found.");
+                    return;
+                }
+                const data = snap.val();
+                
+                if(data.playerO !== null && data.playerO !== undefined) {
+                    hideLoading();
+                    alert("Room is full.");
+                    return;
+                }
+
+                db.ref(`games/${targetGameId}`).update({
+                    playerO: { uid: currentUser.uid, name: currentUser.username }
+                }).then(() => {
+                    hideLoading();
+                    joinGame(targetGameId, 'O');
+                });
+            });
+        });
+
+        // ==========================================
+        // GAME LOGIC
+        // ==========================================
+
+        function joinGame(gameId, symbol) {
+            currentGameId = gameId;
+            mySymbol = symbol;
+            isSearching = false; 
+            
+            // Clean up lobby listeners
+            db.ref(`waitingPlayers/${currentUser.uid}`).off();
+            db.ref(`waitingPlayers/${currentUser.uid}`).onDisconnect().cancel(); 
+
+            showLoading("SYNCHRONIZING GAME...");
+            
+            // FIX: Ensure board is visually cleared before showing the screen
+            cells.forEach(cell => cell.innerHTML = '');
+            clearCanvas();
+
+            setTimeout(() => {
+                hideLoading();
+                switchScreen('game-screen');
+                setupGameListeners();
+            }, 1000);
+        }
+
+        let lastBoardState = Array(9).fill("");
+
+        function setupGameListeners() {
+            const gameRef = db.ref(`games/${currentGameId}`);
+            
+            lastBoardState = Array(9).fill(""); // Reset state tracker
+
+            // Important: Aggressive cleanup logic for Custom Rooms and Normal Rooms
+            gameRef.onDisconnect().remove();
+
+            gameRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                
+                if (!data) {
+                    alert("Game Session Ended.");
+                    resetToMenu();
+                    return;
+                }
+
+                // NEW: Show/Hide Room ID Badge (HOST ONLY)
+                if (data.customRoom && mySymbol === 'X') {
+                    const rawId = currentGameId.replace('room_', '');
+                    const badge = document.getElementById('game-room-badge');
+                    document.getElementById('span-room-id').innerText = rawId;
+                    badge.classList.remove('hidden');
+                } else {
+                    document.getElementById('game-room-badge').classList.add('hidden');
+                }
+
+                if (data.customRoom && !data.playerO) {
+                    document.getElementById('game-status').innerText = "Waiting for friend to join...";
+                    document.getElementById('name-x').innerText = data.playerX.name + (mySymbol === 'X' ? " (YOU)" : "");
+                    document.getElementById('name-o').innerText = "Waiting...";
+                    return;
+                }
+
+                opponentName = mySymbol === 'X' ? data.playerO.name : data.playerX.name;
+                document.getElementById('name-x').innerText = data.playerX.name + (mySymbol === 'X' ? " (YOU)" : "");
+                document.getElementById('name-o').innerText = data.playerO.name + (mySymbol === 'O' ? " (YOU)" : "");
+
+                // UPDATE SCORES
+                if (data.scores) {
+                    document.getElementById('score-x').innerText = data.scores.X || 0;
+                    document.getElementById('score-o').innerText = data.scores.O || 0;
+                }
+
+                // Detect new moves for Sound Effects
+                data.board.forEach((cell, idx) => {
+                    if (cell !== "" && lastBoardState[idx] === "") {
+                        if (cell === 'X') sfx.moveX();
+                        else sfx.moveO();
+                    }
+                });
+                lastBoardState = [...data.board];
+
+                updateBoard(data.board);
+                currentTurn = data.turn;
+                
+                const badgeX = document.getElementById('badge-x');
+                const badgeO = document.getElementById('badge-o');
+                if (data.turn === 'X') {
+                    badgeX.classList.add('active-turn');
+                    badgeO.classList.remove('active-turn');
+                } else {
+                    badgeO.classList.add('active-turn');
+                    badgeX.classList.remove('active-turn');
+                }
+
+                if (data.status === 'playing') {
+                    isGameActive = true;
+                    // FIX: Ensure lastGameStatus is reset for ALL players when game is active
+                    lastGameStatus = 'playing'; 
+                    document.getElementById('btn-play-again').classList.add('hidden');
+                    
+                    if (data.turn === mySymbol) {
+                        gameStatusText.innerText = "YOUR TURN";
+                        gameStatusText.style.color = "#fff";
+                    } else {
+                        gameStatusText.innerText = opponentName.toUpperCase() + "'S TURN";
+                        gameStatusText.style.color = "#888";
+                    }
+                    clearCanvas();
+                } else if (data.status === 'finished') {
+                    isGameActive = false;
+                    handleGameOver(data);
+                    
+                    // NEW: Check if both players are ready from the listener
+                    // This handles the simultaneous click issue
+                    if (data.rematchRequests && data.rematchRequests.X && data.rematchRequests.O) {
+                        restartGame();
+                    }
+                }
+
+                if (!window.chatInitialized) {
+                    setupChatListener();
+                    window.chatInitialized = true;
+                }
+            });
+        }
+
+        // NEW: COPY ID CLICK LISTENER
+        document.getElementById('game-room-badge').addEventListener('click', () => {
+            const rawId = document.getElementById('span-room-id').innerText;
+            copyToClipboard(rawId).then(() => {
+                const badge = document.getElementById('game-room-badge');
+                const original = badge.innerHTML;
+                badge.innerHTML = "ID COPIED! 📋";
+                badge.style.borderColor = "var(--success-color)";
+                badge.style.color = "var(--success-color)";
+                setTimeout(() => {
+                    badge.innerHTML = original;
+                    badge.style.borderColor = "";
+                    badge.style.color = "";
+                    // Re-bind text because innerHTML wipe removed the span
+                    document.getElementById('span-room-id').innerText = rawId; 
+                }, 1000);
+            });
+        });
+
+        function updateBoard(boardData) {
+            cells.forEach((cell, index) => {
+                const val = boardData[index];
+                cell.innerHTML = '';
+                if (val === 'X') cell.innerHTML = `<span class="symbol-x">X</span>`;
+                if (val === 'O') cell.innerHTML = `<span class="symbol-o">O</span>`;
+            });
+        }
+
+        cells.forEach(cell => {
+            // Hover sound for cells
+            cell.addEventListener('mouseenter', () => {
+                if(isGameActive && currentTurn === mySymbol && cell.innerHTML === '') sfx.hover();
+            });
+
+            cell.addEventListener('click', () => {
+                if (document.getElementById('name-o').innerText === "Waiting...") return;
+                
+                if (!isGameActive || currentTurn !== mySymbol) return;
+                const index = cell.getAttribute('data-index');
+                
+                db.ref(`games/${currentGameId}/board/${index}`).once('value', snapshot => {
+                    if (snapshot.val() === "") {
+                        makeMove(index);
+                    }
+                });
+            });
+        });
+
+        function makeMove(index) {
+            const gameRef = db.ref(`games/${currentGameId}`);
+            gameRef.transaction(game => {
+                if (game && game.board[index] === "" && game.turn === mySymbol) {
+                    game.board[index] = mySymbol;
+                    
+                    const winInfo = checkWin(game.board);
+                    if (winInfo) {
+                        game.status = 'finished';
+                        game.winner = mySymbol;
+                        game.winningLine = winInfo;
+                        // INCREMENT SCORE ON WIN
+                        game.scores = game.scores || { X: 0, O: 0 };
+                        game.scores[mySymbol] = (game.scores[mySymbol] || 0) + 1;
+                    } else if (!game.board.includes("")) {
+                        game.status = 'finished';
+                        game.winner = 'draw';
+                    } else {
+                        game.turn = mySymbol === 'X' ? 'O' : 'X';
+                    }
+                }
+                return game;
+            });
+        }
+
+        function checkWin(board) {
+            const patterns = [[0,1,2], [3,4,5], [6,7,8], [0,3,6], [1,4,7], [2,5,8], [0,4,8], [2,4,6]];
+            for (let p of patterns) {
+                if (board[p[0]] && board[p[0]] === board[p[1]] && board[p[0]] === board[p[2]]) return p;
+            }
+            return null;
+        }
+
+        let lastGameStatus = 'playing';
+
+        function handleGameOver(data) {
+            document.getElementById('btn-play-again').classList.remove('hidden');
+            
+            // Only play end game sound once per state change
+            if(lastGameStatus === 'playing') {
+                if (data.winner === 'draw') {
+                    gameStatusText.innerText = "DRAW!";
+                    gameStatusText.style.color = "#fff";
+                    sfx.draw();
+                } else {
+                    drawWinningLine(data.winningLine, data.winner);
+                    if (data.winner === mySymbol) {
+                        gameStatusText.innerText = "VICTORY!";
+                        gameStatusText.style.color = mySymbol === 'X' ? 'var(--neon-x)' : 'var(--neon-o)';
+                        sfx.victory();
+                    } else {
+                        gameStatusText.innerText = "DEFEAT";
+                        gameStatusText.style.color = data.winner === 'X' ? 'var(--neon-x)' : 'var(--neon-o)';
+                        sfx.defeat();
+                    }
+                }
+                lastGameStatus = 'finished';
+            }
+
+            const btnPlayAgain = document.getElementById('btn-play-again');
+            const myReq = data.rematchRequests ? data.rematchRequests[mySymbol] : false;
+            const oppSymbol = mySymbol === 'X' ? 'O' : 'X';
+            const oppReq = data.rematchRequests ? data.rematchRequests[oppSymbol] : false;
+
+            if (myReq) {
+                btnPlayAgain.innerText = "WAITING...";
+                btnPlayAgain.classList.add('waiting');
+            } else {
+                btnPlayAgain.innerText = "PLAY AGAIN";
+                btnPlayAgain.classList.remove('waiting');
+            }
+
+            if (oppReq && !myReq) btnPlayAgain.classList.add('pulse');
+            else btnPlayAgain.classList.remove('pulse');
+        }
+
+        // FIX: CHANGED CLICK LOGIC TO AVOID RACE CONDITION
+        document.getElementById('btn-play-again').addEventListener('click', () => {
+            if (document.getElementById('btn-play-again').classList.contains('waiting')) return;
+            
+            // Just request the rematch. The listener handles the logic when both are true.
+            db.ref(`games/${currentGameId}/rematchRequests/${mySymbol}`).set(true);
+        });
+
+        // RESTART GAME WITH ALTERNATING STARTER LOGIC & TRANSACTION GUARD
+        function restartGame() {
+            db.ref(`games/${currentGameId}`).transaction(game => {
+                // GUARD: Only reset if the game is actually finished and both requested it.
+                // This prevents double-resets if both players trigger this function.
+                if (game && game.status === 'finished' && game.rematchRequests && game.rematchRequests.X && game.rematchRequests.O) {
+                    
+                    // Calculate next starter
+                    const currentStarter = game.startingTurn || 'X';
+                    const nextStarter = currentStarter === 'X' ? 'O' : 'X';
+
+                    game.board = Array(9).fill("");
+                    game.status = 'playing';
+                    game.winner = null;
+                    game.winningLine = null;
+                    game.rematchRequests = { X: false, O: false };
+                    
+                    // Update turn info
+                    game.startingTurn = nextStarter;
+                    game.turn = nextStarter;
+                    
+                    return game;
+                }
+                // If conditions aren't met (e.g. already reset), return undefined to abort
+                return;
+            }).then(() => {
+                lastGameStatus = 'playing'; // Reset status tracker
+                sfx.transition(); // Sound
+            });
+        }
+
+        document.getElementById('btn-leave-match').addEventListener('click', () => {
+            if(confirm("Are you sure you want to leave the match? This will end the session.")) {
+                db.ref(`games/${currentGameId}`).remove(); 
+                resetToMenu();
+            }
+        });
+
+        // FIX: COMPLETE RESET FUNCTION
+        function resetToMenu() {
+            if(currentGameId) {
+                // Detach all listeners to prevent ghost updates
+                db.ref(`games/${currentGameId}`).off();
+                db.ref(`games/${currentGameId}/chat`).off();
+                db.ref(`games/${currentGameId}`).onDisconnect().cancel();
+            }
+            
+            // 1. Reset Core Variables
+            currentGameId = null;
+            mySymbol = null;
+            window.chatInitialized = false;
+            lastGameStatus = 'playing';
+            lastBoardState = Array(9).fill(""); // Clear sound effect memory
+            
+            // 2. FORCE CLEAR BOARD HTML (The Main Fix)
+            cells.forEach(cell => {
+                cell.innerHTML = '';
+            });
+
+            // 3. Reset UI Elements
+            chatMsgs.innerHTML = "";
+            clearCanvas(); // Clear winning line
+            document.getElementById('score-x').innerText = "0";
+            document.getElementById('score-o').innerText = "0";
+            document.getElementById('name-x').innerText = "Waiting...";
+            document.getElementById('name-o').innerText = "Waiting...";
+            document.getElementById('game-room-badge').classList.add('hidden'); // Hide Badge
+            
+            // 4. Reset Status Text & Badges
+            gameStatusText.innerText = "Initializing...";
+            gameStatusText.style.color = "#fff";
+            document.getElementById('badge-x').classList.remove('active-turn');
+            document.getElementById('badge-o').classList.remove('active-turn');
+            
+            // 5. Hide Rematch Button
+            document.getElementById('btn-play-again').classList.add('hidden');
+            document.getElementById('btn-play-again').classList.remove('waiting', 'pulse');
+
+            resetMatchmakingUI();
+            switchScreen('start-screen');
+        }
+
+        // ==========================================
+        // GRAPHICS
+        // ==========================================
+
+        function drawWinningLine(indices, winner) {
+            if (!indices) return;
+            const cellWidth = canvas.width / 3;
+            const [start, , end] = indices;
+            
+            const startX = (start % 3) * cellWidth + cellWidth / 2;
+            const startY = Math.floor(start / 3) * cellWidth + cellWidth / 2;
+            const endX = (end % 3) * cellWidth + cellWidth / 2;
+            const endY = Math.floor(end / 3) * cellWidth + cellWidth / 2;
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.lineWidth = 10;
+            ctx.lineCap = 'round';
+            const color = winner === 'X' ? '#00ffff' : '#ff00ff';
+            ctx.strokeStyle = color;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = color;
+            ctx.stroke();
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = '#fff';
+            ctx.stroke();
+        }
+
+        function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+        // ==========================================
+        // CHAT SYSTEM
+        // ==========================================
+        
+        const chatContainer = document.getElementById('chat-container');
+        const btnChatToggle = document.getElementById('btn-chat-toggle');
+
+        btnChatToggle.addEventListener('click', () => {
+            chatContainer.classList.toggle('fullscreen');
+            if (chatContainer.classList.contains('fullscreen')) {
+                btnChatToggle.innerHTML = '&#10005;'; 
+                btnChatToggle.title = "Minimize";
+            } else {
+                btnChatToggle.innerHTML = '&#10530;'; 
+                btnChatToggle.title = "Fullscreen";
+            }
+        });
+
+        function setupChatListener() {
+            db.ref(`games/${currentGameId}/chat`).on('child_added', snapshot => {
+                const msg = snapshot.val();
+
+                // Play sound if msg is not from self and it's new
+                if (msg.sender !== mySymbol) {
+                    sfx.chat();
+                }
+
+                const div = document.createElement('div');
+                div.classList.add('msg');
+                
+                const label = document.createElement('div');
+                label.classList.add('msg-sender');
+                
+                if (msg.sender === mySymbol) {
+                    div.classList.add('msg-self');
+                    label.innerText = "YOU";
+                    label.style.textAlign = 'right';
+                } else {
+                    div.classList.add('msg-opp');
+                    label.innerText = opponentName.toUpperCase();
+                    label.style.textAlign = 'left';
+                }
+                
+                div.appendChild(label);
+                div.appendChild(document.createTextNode(msg.message));
+                
+                chatMsgs.appendChild(div);
+                chatMsgs.scrollTop = chatMsgs.scrollHeight;
+            });
+        }
+
+        document.getElementById('btn-chat-send').addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+        function sendMessage() {
+            const txt = chatInput.value.trim();
+            if (!txt || !currentGameId) return;
+            sfx.click(); // Send Sound
+            db.ref(`games/${currentGameId}/chat`).push({
+                sender: mySymbol,
+                message: txt,
+                timestamp: Date.now()
+            });
+            chatInput.value = '';
+        }
+
+    </script>
+</body>
+</html>
